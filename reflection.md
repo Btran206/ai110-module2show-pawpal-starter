@@ -1,17 +1,32 @@
 # PawPal+ Project Reflection
 
 ## 1. System Design
+The three core actions a user should be able to perform includes:
+Add a pet:
+The user can setup their pet's profile with name, species, age, needs, etc.
+
+Add/edit tasks:
+The user can add tasks like walk, feed, meds, grooming, etc and set priorities. Users also have the ability to revise/remove tasks.
+
+Generate plan with explanation:
+The user can generate a daily schedule that fits the pets needs with a short explanation of why each task was chosen/ordered.
 
 **a. Initial design**
 
 - Briefly describe your initial UML design.
+
+My UML uses a simple chain: an Owner owns one or more Pet objects, and each Pet has its own list of CareTask objects. The scheduler processes the owner's preferences, etc and figures out a plan from there.
+
 - What classes did you include, and what responsibilities did you assign to each?
+
+Owner is the starting point it holds the person's name, how much time they have in a day, and the list of pets they're caring for. Pet stores the pet's name and species, and it keeps track of its own tasks. CareTask holds the tasks, duration, priority level, and a flag for whether it's done. The Scheduler processes the owner, and it figures out what tasks to fit into the day.
 
 **b. Design changes**
 
 - Did your design change during implementation?
+Yes after asking the AI to review the skeleton, It suggested some changes.
 - If yes, describe at least one change and why you made it.
-
+There was missing functionality within the readme specs that I did not address. I added an edit function to the skeleton because the readme specifies that it needed this functionality. The AI also found that caretask has no reference to a pet_name which is problematic because when flattening all tasks with the scheduler, you would loses the context of which task belongs to which pet. So I added a pet_name attribute to CareTask to address this issue.
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
