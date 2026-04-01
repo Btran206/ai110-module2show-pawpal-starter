@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 from pawpal_system import CareTask, Pet, Owner, Scheduler
 
 # Create owner
@@ -13,14 +13,14 @@ dog.add_task(CareTask(
     title="Morning Walk",
     duration_minutes=30,
     description="Walk around the block",
-    due_date=date.today(),
+    due_datetime=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0),
     priority="high"
 ))
 dog.add_task(CareTask(
     title="Bath Time",
     duration_minutes=45,
     description="Full grooming session",
-    due_date=date.today(),
+    due_datetime=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0),
     priority="medium"
 ))
 
@@ -29,7 +29,7 @@ cat.add_task(CareTask(
     title="Vet Checkup",
     duration_minutes=60,
     description="Annual wellness visit",
-    due_date=date.today(),
+    due_datetime=datetime.now().replace(hour=10, minute=30, second=0, microsecond=0),
     priority="high"
 ))
 
@@ -39,7 +39,7 @@ owner.add_pet(cat)
 
 # Generate and print plan
 scheduler = Scheduler()
-plan = scheduler.generate_plan(owner)
+plan, excluded = scheduler.generate_plan(owner)
 
 print("=== Today's Schedule ===")
-print(scheduler.explain_plan(plan))
+print(scheduler.explain_plan(plan, excluded))

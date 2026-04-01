@@ -36,6 +36,6 @@ def test_generate_plan_does_not_exceed_available_minutes():
     pet.add_task(CareTask(title="Bath", duration_minutes=40, priority="medium"))
     owner.add_pet(pet)
 
-    plan = Scheduler().generate_plan(owner)
+    plan, excluded = Scheduler().generate_plan(owner)
     total = sum(t.duration_minutes for t in plan)
     assert total <= owner.available_minutes

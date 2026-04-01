@@ -33,13 +33,15 @@ There was missing functionality within the readme specs that I did not address. 
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The scheduler considers two main things: how much time the owner has in the day, and how urgent each task is. Urgency is a combination of priority level (high, medium, low) and due date — overdue tasks always bubble to the top, and within the same priority, tasks due sooner rank higher.
+
+I decided time and urgency mattered most because those felt like the most real constraints a pet owner actually faces. You only have so many hours in the day, and some things genuinely can't wait (like medications or feeding). Things like personal preferences felt too hard to generalize cleanly without more user input, so I kept the model focused on what was concrete and actionable.
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+The scheduler only checks whether a task fits within the total time left in the day — it doesn't track actual start and end times. So if you had two 30-minute tasks and 60 minutes available, they'd both make the plan, but the scheduler has no idea *when* they'd actually happen or whether they'd bump into each other in real life.
+
+I think that's a reasonable tradeoff here because pet care isn't really about booking exact calendar slots. You're not scheduling a meeting at 3pm — you're just making sure the dog gets walked and the cat gets fed sometime today. Keeping it as a simple budget model makes the logic a lot easier to follow and debug, and for most day-to-day pet care it works fine.
 
 ---
 

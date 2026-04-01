@@ -46,6 +46,8 @@ if "scheduler" not in st.session_state:
     st.session_state.scheduler = Scheduler()
 if "plan" not in st.session_state:
     st.session_state.plan = []
+if "excluded" not in st.session_state:
+    st.session_state.excluded = []
 
 # --- Owner Registration ---
 # Updates the existing owner in-place so pets are not wiped on re-submit
@@ -81,7 +83,7 @@ if submitted:
 pets = st.session_state.owner.list_pets()
 if pets:
     st.write("Current pets:")
-    st.table([{"name": p.name, "species": p.species} for p in pets])
+    st.table([{"name": p.name, "species": p.species, "task_count": p.task_count} for p in pets])
 
     remove_name = st.selectbox("Select pet to remove", [p.name for p in pets], key="remove_pet")
     if st.button("Remove pet"):
@@ -107,15 +109,36 @@ if pets:
         duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
     with col3:
         priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
+    description = st.text_input("Description", value="")
+    due_date = st.date_input("Due date", value=None)
+    due_time = st.time_input("Due time", value=None)
 
     if st.button("Add task"):
-        task = CareTask(title=task_title, duration_minutes=int(duration), priority=priority)
+        from datetime import datetime, time
+        due_datetime = datetime.combine(due_date, due_time if due_time else time(0, 0)) if due_date else None
+        task = CareTask(title=task_title, duration_minutes=int(duration), priority=priority,
+                        description=description, due_datetime=due_datetime)
         selected_pet.add_task(task)
 
-    # Show task list and remove option only when tasks exist for the selected pet
+    # Show task list and remove/complete options only when tasks exist for the selected pet
     if selected_pet.list_tasks():
         st.write(f"Tasks for {selected_pet.name}:")
-        st.table([{"title": t.title, "duration_minutes": t.duration_minutes, "priority": t.priority} for t in selected_pet.list_tasks()])
+        st.table([{
+            "title": t.title,
+            "description": t.description,
+            "due_datetime": t.due_datetime.strftime("%Y-%m-%d %H:%M") if t.due_datetime else "—",
+            "duration_minutes": t.duration_minutes,
+            "priority": t.priority,
+            "completed": t.completed
+        } for t in selected_pet.list_tasks()])
+
+        incomplete = [t.title for t in selected_pet.list_tasks() if not t.completed]
+        if incomplete:
+            complete_title = st.selectbox("Mark task complete", incomplete, key="mark_complete")
+            if st.button("Mark complete"):
+                task = next(t for t in selected_pet.list_tasks() if t.title == complete_title)
+                task.mark_complete()
+                st.rerun()
 
         remove_task_title = st.selectbox("Select task to remove", [t.title for t in selected_pet.list_tasks()], key="remove_task")
         if st.button("Remove task"):
@@ -141,17 +164,22 @@ if sort_option == "Sorted by priority":
 else:
     all_tasks = scheduler.get_all_tasks(owner)
 
+pet_filter_options = ["All pets"] + [p.name for p in owner.list_pets()]
+pet_filter = st.selectbox("Filter by pet", pet_filter_options, key="task_pet_filter")
+if pet_filter != "All pets":
+    all_tasks = scheduler.filter_tasks_by_pet(owner, pet_filter)
+
 if all_tasks:
     with st.expander("View tasks"):
-        st.table([{"pet": t.pet_name, "title": t.title, "duration_minutes": t.duration_minutes, "priority": t.priority} for t in all_tasks])
+        st.table([{"pet": t.pet_name, "title": t.title, "duration_minutes": t.duration_minutes, "priority": t.priority, "due_datetime": t.due_datetime.strftime("%Y-%m-%d %H:%M") if t.due_datetime else "—"} for t in all_tasks])
 else:
     st.info("No tasks added yet.")
 
 # Generate a plan fitted to the owner's available minutes and store it in session state
 if st.button("Generate schedule"):
-    st.session_state.plan = scheduler.generate_plan(owner)
+    st.session_state.plan, st.session_state.excluded = scheduler.generate_plan(owner)
 
 # Display the human-readable schedule explanation
-if st.session_state.plan:
+if st.session_state.plan or st.session_state.excluded:
     st.markdown("### Today's Schedule")
-    st.text(scheduler.explain_plan(st.session_state.plan))
+    st.text(scheduler.explain_plan(st.session_state.plan, st.session_state.excluded))

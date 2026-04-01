@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import datetime
 
 
 @dataclass
@@ -8,7 +8,7 @@ class CareTask:
     title: str
     duration_minutes: int
     description: str = ""
-    due_date: date | None = None
+    due_datetime: datetime | None = None
     priority: str = "medium"  # "low", "medium", or "high"
     completed: bool = False
     pet_name: str = ""
@@ -33,8 +33,10 @@ class Pet:
 
     def remove_task(self, title: str) -> None:
         """Remove the task matching the given title and decrement the task counter."""
+        original_count = len(self.tasks)
         self.tasks = [t for t in self.tasks if t.title != title]
-        self.task_count -= 1
+        if len(self.tasks) < original_count:
+            self.task_count -= 1
 
     def list_tasks(self) -> list[CareTask]:
         """Return all tasks assigned to this pet."""
@@ -42,7 +44,7 @@ class Pet:
 
     def edit_task(self, title: str, new_title: str | None = None, new_duration: int | None = None,
                   new_priority: str | None = None, new_description: str | None = None,
-                  new_due_date: date | None = None) -> None:
+                  new_due_datetime: datetime | None = None) -> None:
         """Update any provided fields on the task matching the given title."""
         for task in self.tasks:
             if task.title == title:
@@ -54,8 +56,8 @@ class Pet:
                     task.priority = new_priority
                 if new_description is not None:
                     task.description = new_description
-                if new_due_date is not None:
-                    task.due_date = new_due_date
+                if new_due_datetime is not None:
+                    task.due_datetime = new_due_datetime
                 break
 
 
@@ -80,6 +82,8 @@ class Owner:
 
 
 class Scheduler:
+    _PRIORITY_ORDER = {"low": 0, "medium": 1, "high": 2}
+
     def get_all_tasks(self, owner: Owner) -> list[CareTask]:
         """Return a flat list of all tasks across every pet the owner has."""
         all_tasks = []
@@ -88,29 +92,66 @@ class Scheduler:
         return all_tasks
 
     def get_tasks_by_priority(self, owner: Owner) -> list[CareTask]:
-        """Return all tasks sorted from highest to lowest priority."""
-        priority_order = {"low": 0, "medium": 1, "high": 2}
-        return sorted(self.get_all_tasks(owner), key=lambda t: priority_order.get(t.priority, 1), reverse=True)
+        """Return all tasks sorted by priority, with due-datetime urgency as a tiebreaker.
 
-    def generate_plan(self, owner: Owner) -> list[CareTask]:
-        """Build a schedule of incomplete tasks that fits within the owner's available minutes."""
+        Tasks due sooner are ranked higher within the same priority level.
+        Overdue tasks are treated as most urgent. Tasks with no due datetime rank last.
+        """
+        now = datetime.now()
+
+        def sort_key(task):
+            is_overdue = bool(task.due_datetime and task.due_datetime < now)
+            priority_rank = -self._PRIORITY_ORDER.get(task.priority, 1)
+            if task.due_datetime:
+                seconds_until_due = (task.due_datetime - now).total_seconds()
+            else:
+                seconds_until_due = float("inf")  # no due date → sort last
+            return (not is_overdue, priority_rank, seconds_until_due)
+
+        return sorted(self.get_all_tasks(owner), key=sort_key)
+
+    def filter_tasks_by_pet(self, owner: Owner, pet_name: str) -> list[CareTask]:
+        """Return all tasks belonging to the pet with the given name."""
+        return [t for t in self.get_all_tasks(owner) if t.pet_name == pet_name]
+
+    def generate_plan(self, owner: Owner) -> tuple[list[CareTask], list[CareTask]]:
+        """Build a schedule of incomplete tasks that fits within the owner's available minutes.
+
+        Returns a tuple of (scheduled_tasks, excluded_tasks) so callers can surface
+        what got dropped due to time constraints.
+        """
         tasks = self.get_tasks_by_priority(owner)
         plan = []
+        excluded = []
         remaining = owner.available_minutes
         for task in tasks:
-            if not task.completed and task.duration_minutes <= remaining:
+            if task.completed:
+                continue
+            if task.duration_minutes <= remaining:
                 plan.append(task)
                 remaining -= task.duration_minutes
-        return plan
+            else:
+                excluded.append(task)
+        return plan, excluded
 
-    def explain_plan(self, plan: list[CareTask]) -> str:
-        """Return a human-readable summary of the scheduled plan."""
-        if not plan:
+    def explain_plan(self, plan: list[CareTask], excluded: list[CareTask] | None = None) -> str:
+        """Return a human-readable summary of the scheduled plan.
+
+        If excluded tasks are provided, appends a section listing what was dropped.
+        """
+        if not plan and not excluded:
             return "No tasks scheduled."
         lines = []
         total = 0
-        for task in plan:
-            lines.append(f"- [{task.priority.upper()}] {task.title} ({task.pet_name}) — {task.duration_minutes} min")
-            total += task.duration_minutes
-        lines.append(f"\nTotal time: {total} min")
+        if plan:
+            for task in plan:
+                lines.append(f"- [{task.priority.upper()}] {task.title} ({task.pet_name}) — {task.duration_minutes} min")
+                total += task.duration_minutes
+            lines.append(f"\nTotal time: {total} min")
+        else:
+            lines.append("No tasks fit within available time.")
+        if excluded:
+            lines.append("\nNot scheduled (insufficient time):")
+            for task in excluded:
+                lines.append(f"  * [{task.priority.upper()}] {task.title} ({task.pet_name}) — {task.duration_minutes} min")
         return "\n".join(lines)
