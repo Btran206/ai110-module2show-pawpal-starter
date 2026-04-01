@@ -32,10 +32,17 @@ class Pet:
         self.task_count += 1
 
     def remove_task(self, title: str) -> None:
-        """Remove the task matching the given title and decrement the task counter."""
-        original_count = len(self.tasks)
-        self.tasks = [t for t in self.tasks if t.title != title]
-        if len(self.tasks) < original_count:
+        """Remove the first task matching the given title and decrement the task counter."""
+        for i, t in enumerate(self.tasks):
+            if t.title == title:
+                self.tasks.pop(i)
+                self.task_count -= 1
+                return
+
+    def remove_task_at(self, index: int) -> None:
+        """Remove the task at the given index and decrement the task counter."""
+        if 0 <= index < len(self.tasks):
+            self.tasks.pop(index)
             self.task_count -= 1
 
     def list_tasks(self) -> list[CareTask]:

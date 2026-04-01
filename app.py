@@ -5,37 +5,7 @@ st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
 st.title("🐾 PawPal+")
 
-st.markdown(
-    """
-Welcome to the PawPal+ starter app.
-
-This file is intentionally thin. It gives you a working Streamlit app so you can start quickly,
-but **it does not implement the project logic**. Your job is to design the system and build it.
-
-Use this app as your interactive demo once your backend classes/functions exist.
-"""
-)
-
-with st.expander("Scenario", expanded=True):
-    st.markdown(
-        """
-**PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
-for their pet(s) based on constraints like time, priority, and preferences.
-
-You will design and implement the scheduling logic and connect it to this Streamlit UI.
-"""
-    )
-
-with st.expander("What you need to build", expanded=True):
-    st.markdown(
-        """
-At minimum, your system should:
-- Represent pet care tasks (what needs to happen, how long it takes, priority)
-- Represent the pet and the owner (basic info and preferences)
-- Build a plan/schedule for a day that chooses and orders tasks based on constraints
-- Explain the plan (why each task was chosen and when it happens)
-"""
-    )
+st.caption("Plan and schedule daily care tasks for your pets.")
 
 st.divider()
 
@@ -49,25 +19,27 @@ if "plan" not in st.session_state:
 if "excluded" not in st.session_state:
     st.session_state.excluded = []
 
-# --- Owner Registration ---
+# --- Owner Registration (Sidebar) ---
 # Updates the existing owner in-place so pets are not wiped on re-submit
-st.subheader("Registration")
-with st.form("owner_form"):
-    owner_name = st.text_input("Name", value=st.session_state.owner.name)
-    owner_email = st.text_input("Email", value=st.session_state.owner.email)
-    available_minutes = st.number_input("Available minutes today", min_value=10, max_value=1440, value=st.session_state.owner.available_minutes)
-    owner_submitted = st.form_submit_button("Register")
+with st.sidebar:
+    st.header("Owner Profile")
+    with st.form("owner_form"):
+        owner_name = st.text_input("Name", value=st.session_state.owner.name)
+        owner_email = st.text_input("Email", value=st.session_state.owner.email)
+        available_minutes = st.number_input("Available minutes today", min_value=10, max_value=1440, value=st.session_state.owner.available_minutes)
+        owner_submitted = st.form_submit_button("Save")
 
-if owner_submitted:
-    st.session_state.owner.name = owner_name
-    st.session_state.owner.email = owner_email
-    st.session_state.owner.available_minutes = int(available_minutes)
+    if owner_submitted:
+        st.session_state.owner.name = owner_name
+        st.session_state.owner.email = owner_email
+        st.session_state.owner.available_minutes = int(available_minutes)
 
-# Display current owner summary
+    owner = st.session_state.owner
+    st.markdown(f"**Name:** {owner.name or '—'}")
+    st.markdown(f"**Email:** {owner.email or '—'}")
+    st.markdown(f"**Available minutes:** {owner.available_minutes}")
+
 owner = st.session_state.owner
-st.markdown(f"**Name:** {owner.name or '—'}")
-st.markdown(f"**Email:** {owner.email or '—'}")
-st.markdown(f"**Available minutes:** {owner.available_minutes}")
 
 # --- Pet Management ---
 st.subheader("Add a Pet")
@@ -132,18 +104,24 @@ if pets:
             "completed": t.completed
         } for t in selected_pet.list_tasks()])
 
-        incomplete = [t.title for t in selected_pet.list_tasks() if not t.completed]
-        if incomplete:
-            complete_title = st.selectbox("Mark task complete", incomplete, key="mark_complete")
-            if st.button("Mark complete"):
-                task = next(t for t in selected_pet.list_tasks() if t.title == complete_title)
-                task.mark_complete()
+        all_titles = [t.title for t in selected_pet.list_tasks()]
+        task_labels = [
+            f"{t.title} id:{i}" if all_titles.count(t.title) > 1 else t.title
+            for i, t in enumerate(selected_pet.list_tasks())
+        ]
+        selected_idx = st.selectbox(
+            "Select a task", range(len(task_labels)),
+            format_func=lambda i: task_labels[i], key="task_action_select"
+        )
+        action_col1, action_col2 = st.columns(2)
+        with action_col1:
+            if st.button("Mark complete", use_container_width=True):
+                selected_pet.list_tasks()[selected_idx].mark_complete()
                 st.rerun()
-
-        remove_task_title = st.selectbox("Select task to remove", [t.title for t in selected_pet.list_tasks()], key="remove_task")
-        if st.button("Remove task"):
-            selected_pet.remove_task(remove_task_title)
-            st.rerun()  # Force re-render so table reflects removal immediately
+        with action_col2:
+            if st.button("Remove task", use_container_width=True):
+                selected_pet.remove_task_at(selected_idx)
+                st.rerun()
     else:
         st.info(f"No tasks yet for {selected_pet.name}.")
 else:
@@ -181,5 +159,23 @@ if st.button("Generate schedule"):
 
 # Display the human-readable schedule explanation
 if st.session_state.plan or st.session_state.excluded:
+    from datetime import datetime
+    now = datetime.now()
     st.markdown("### Today's Schedule")
-    st.text(scheduler.explain_plan(st.session_state.plan, st.session_state.excluded))
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Tasks Scheduled", len(st.session_state.plan))
+    col2.metric("Tasks Excluded", len(st.session_state.excluded))
+    col3.metric("Minutes Used", sum(t.duration_minutes for t in st.session_state.plan))
+
+    for task in st.session_state.plan:
+        if task.completed:
+            st.success(f"✓ {task.title} ({task.pet_name}) — {task.duration_minutes} min")
+        elif task.due_datetime and task.due_datetime < now:
+            st.error(f"⚠ OVERDUE: {task.title} ({task.pet_name}) — {task.priority} priority, {task.duration_minutes} min")
+        else:
+            st.warning(f"• {task.title} ({task.pet_name}) — {task.priority} priority, {task.duration_minutes} min")
+
+    if st.session_state.excluded:
+        st.markdown("**Excluded (insufficient time):**")
+        for task in st.session_state.excluded:
+            st.error(f"✗ {task.title} ({task.pet_name}) — {task.duration_minutes} min needed")
